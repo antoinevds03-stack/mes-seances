@@ -1,4 +1,4 @@
-/* Mes Séances — carnet d'entraînement perso : muscu (façon Hevy), bodyboard, natation, course.
+/* Biceps — carnet d'entraînement perso : muscu (façon Hevy), bodyboard, natation, course.
    Tout est stocké sur l'appareil (localStorage). Sauvegarde/restauration en JSON dans les réglages. */
 "use strict";
 const $ = s => document.querySelector(s);
@@ -43,6 +43,7 @@ Object.assign(IC, {
   plan:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6M9 4a2 2 0 0 0-2 2H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-1a2 2 0 0 0-2-2"/><path d="M8 12h8M8 16h5"/></svg>',
   all:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>',
   left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>',
   right:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>'
 });
 const SPORTS = {
@@ -55,10 +56,10 @@ const SPORT_KEYS = Object.keys(SPORTS);
 
 /* ---------- Données ---------- */
 const KEY = "messeances.data";
-const DEF = () => ({v:1, workouts:[], routines:[], customEx:[], plans:{}, settings:{rest:90, theme:"auto", sound:true, wake:true}, active:null, mvSkip:[], lastBackup:null});
+const DEF = () => ({v:1, workouts:[], routines:[], customEx:[], plans:{}, profile:{}, measures:[], settings:{rest:90, theme:"auto", sound:true, wake:true}, active:null, mvSkip:[], lastBackup:null});
 let DB = DEF();
 try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v) DB = Object.assign(DEF(), s, {settings:Object.assign(DEF().settings, s.settings || {})}); } catch (e) {}
-if (!DB.plans) DB.plans = {};
+if (!DB.plans) DB.plans = {}; if (!DB.profile) DB.profile = {}; if (!DB.measures) DB.measures = [];
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(DB)); return true; } catch (e) { toast("Mémoire pleine : exporte une sauvegarde puis supprime d'anciennes séances."); return false; } }
 const sortW = a => a.sort((x, y) => (y.date + (y.time||"")).localeCompare(x.date + (x.time||"")));
 
@@ -131,7 +132,7 @@ let TAB = "home";
 document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => { if (TAB === b.dataset.tab) { window.scrollTo({top:0, behavior:"smooth"}); return; } TAB = b.dataset.tab; render(); window.scrollTo(0, 0); }));
 function render(){
   document.querySelectorAll(".nav button").forEach(b => { if (b.dataset.tab === TAB) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
-  ({home:renderHome, log:renderLog, plans:renderPlans, ex:renderEx, stats:renderStats})[TAB]();
+  ({home:renderHome, log:renderLog, plans:renderPlans, ex:renderEx, stats:renderProfile})[TAB]();
   const v = $("#view"); v.classList.remove("anim-in"); void v.offsetWidth; [...v.children].forEach((c, i) => c.style.setProperty("--i", Math.min(i, 10))); v.classList.add("anim-in");
 }
 const activeBanner = () => DB.active ? `<div class="banner live-b"><span class="sp-ic">${IC.muscu}</span><div class="bt"><b><span class="pulse"></span>${esc(DB.active.title || "Séance en cours")}</b><span>${DB.active.editOf ? "Modification en cours" : "Commencée il y a " + fDur((Date.now() - DB.active.startTs)/60000)}</span></div><button class="btn small" data-act="resume">Reprendre</button></div>` : "";
@@ -265,7 +266,7 @@ function renderPlans(){
 function openProgram(id){
   const p = progDef(id); if (!p) return; const following = DB.plans.muscu && DB.plans.muscu.id === id;
   let h = `<p style="margin:0 0 10px;color:var(--muted);line-height:1.45">${esc(p.desc)}</p><div class="meta" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"><span class="pill">${esc(p.level)}</span><span class="pill">${esc(p.freq)}</span><span class="pill">${esc(p.weeks)}</span></div>`;
-  h += p.sessions.map(s => `<div class="prog-s"><h3>${esc(s.name)}</h3>${s.items.map(([exId, sets, reps, rest]) => { const e = exById(exId); return `<div class="prog-ex"><span class="thumb">${figSVG(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${sets} × ${esc(reps)}${rest ? ` · repos ${fClock(rest)}` : ""}</span></span></div>`; }).join("")}</div>`).join("");
+  h += p.sessions.map(s => `<div class="prog-s"><h3>${esc(s.name)}</h3>${s.items.map(([exId, sets, reps, rest]) => { const e = exById(exId); return `<div class="prog-ex"><span class="thumb">${exThumb(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${sets} × ${esc(reps)}${rest ? ` · repos ${fClock(rest)}` : ""}</span></span></div>`; }).join("")}</div>`).join("");
   h += `<p class="note-s" style="margin:4px 0 12px">Les séances deviennent des routines modifiables. L'appli te propose ensuite la suivante, dans l'ordre.</p>`;
   h += following ? `<div class="btns"><button class="btn danger line" data-unfollow="muscu">Arrêter de suivre</button></div>` : `<button class="btn pri wide" data-follow="${esc(id)}">Suivre ce programme</button>`;
   openOv(p.name, h);
@@ -307,7 +308,7 @@ function openRoutine(id){
 function drawRoutine(){
   const rest = v => `<select data-ri-rest>${[0,30,45,60,75,90,120,150,180,240,300].map(s => `<option value="${s}" ${s === v ? "selected" : ""}>${s ? fClock(s) : "Pas de repos"}</option>`).join("")}</select>`;
   const h = `<form class="f" id="rtForm"><label class="fld"><span>Nom</span><input id="rtName" value="${esc(RT.name)}" placeholder="Ex. Push, Jambes lourdes…" required></label>
-    <ul class="exlist">${RT.items.map((it, i) => `<li data-ri="${i}" style="padding:10px 12px"><div style="display:flex;align-items:center;gap:10px"><span class="thumb" style="width:40px;height:40px">${figSVG(exById(it.exId))}</span><b style="flex:1">${esc(exById(it.exId).name)}</b>
+    <ul class="exlist">${RT.items.map((it, i) => `<li data-ri="${i}" style="padding:10px 12px"><div style="display:flex;align-items:center;gap:10px"><span class="thumb" style="width:40px;height:40px">${exThumb(exById(it.exId))}</span><b style="flex:1">${esc(exById(it.exId).name)}</b>
       <button type="button" class="icon-btn sm ghost" data-ri-up aria-label="Monter">↑</button><button type="button" class="icon-btn sm ghost" data-ri-del aria-label="Retirer">✕</button></div>
       <div class="row3" style="margin-top:6px"><label class="fld"><span>Séries</span><input type="number" inputmode="numeric" min="1" max="12" value="${it.sets}" data-ri-sets></label><label class="fld"><span>Objectif</span><input value="${esc(it.reps || "")}" placeholder="8–10" data-ri-reps></label><label class="fld"><span>Repos</span>${rest(it.rest)}</label></div></li>`).join("") || `<li style="padding:12px"><p class="empty">Ajoute tes exercices.</p></li>`}</ul>
     <button type="button" class="btn" data-act="rt-add">${IC.plus} Ajouter des exercices</button>
@@ -343,7 +344,7 @@ function openPicker(onDone, onBack, single){
     const words = norm(q).split(" ").filter(Boolean);
     const list = allEx().filter(e => (!mus || e.muscle === mus) && words.every(w => norm(e.name + " " + e.muscle + " " + e.equip).includes(w)))
       .sort((a, b) => a.name.localeCompare(b.name, "fr"));
-    $("#pkList").innerHTML = list.map(e => `<li><button type="button" class="exr" data-pk="${esc(e.id)}" aria-pressed="${sel.includes(e.id)}"><span class="thumb">${figSVG(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${esc(e.muscle)} · ${esc(e.equip)}</span></span>${single ? "" : `<span class="chk">${sel.includes(e.id) ? IC.check : ""}</span>`}</button></li>`).join("") || `<li style="padding:12px"><p class="empty">Aucun exercice. Crée-le avec le bouton ci-dessous.</p></li>`;
+    $("#pkList").innerHTML = list.map(e => `<li><button type="button" class="exr" data-pk="${esc(e.id)}" aria-pressed="${sel.includes(e.id)}"><span class="thumb">${exThumb(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${esc(e.muscle)} · ${esc(e.equip)}</span></span>${single ? "" : `<span class="chk">${sel.includes(e.id) ? IC.check : ""}</span>`}</button></li>`).join("") || `<li style="padding:12px"><p class="empty">Aucun exercice. Crée-le avec le bouton ci-dessous.</p></li>`;
     $("#pkGo").textContent = sel.length ? `Ajouter ${sel.length} exercice${sel.length > 1 ? "s" : ""}` : "Choisis des exercices";
     $("#pkGo").disabled = !sel.length;
   };
@@ -418,7 +419,7 @@ function exCard(ex, i){
     const inp = f => `<input inputmode="${f === "kg" ? "decimal" : "numeric"}" data-f="${f}" value="${s[f] != null ? esc(f === "kg" ? String(s[f]).replace(".", ",") : s[f]) : ""}" placeholder="${esc(ph(f))}" aria-label="${f}">`;
     const cells = k === "temps" ? inp("sec") : k === "reps" ? inp("reps") : inp("kg") + "</td><td>" + inp("reps");
     return `<tr class="${s.done ? "done" : ""}" data-j="${j}"><td><button class="stype ${s.t}" data-s="type" aria-label="Type de série">${lab}</button></td><td><button class="prev" data-s="prev">${esc(ptxt)}</button></td><td>${cells}</td><td><button class="chkb" data-s="done" aria-label="Valider la série">${IC.check}</button></td><td><button class="del-set" data-s="del" aria-label="Supprimer la série">✕</button></td></tr>`; }).join("");
-  return `<div class="exc" data-i="${i}"><div class="exc-h"><span class="thumb">${figSVG(e)}</span><button class="exn" data-x="hist">${esc(e.name)}<small>${esc(e.muscle)} · ${esc(e.equip)}</small></button><button class="icon-btn sm ghost" data-x="menu" aria-label="Options">${IC.more}</button></div>
+  return `<div class="exc" data-i="${i}"><div class="exc-h"><span class="thumb">${exThumb(e)}</span><button class="exn" data-x="hist">${esc(e.name)}<small>${esc(e.muscle)} · ${esc(e.equip)}</small></button><button class="icon-btn sm ghost" data-x="menu" aria-label="Options">${IC.more}</button></div>
     <div class="exc-sub"><button class="rest-chip" data-x="rest">${IC.clock} ${ex.rest ? "Repos " + fClock(ex.rest) : "Pas de repos"}</button>${ex.target ? `<span class="target">Objectif ${ex.sets.length} × ${esc(ex.target)}</span>` : ""}</div>
     <input class="exc-note" data-x="note" value="${esc(ex.note)}" placeholder="Note (réglage machine, sensation…)">
     <table class="sets"><thead><tr><th style="width:38px">Série</th><th>Précédent</th>${cols.map(c => `<th>${c}</th>`).join("")}<th style="width:40px">✓</th><th style="width:24px"></th></tr></thead><tbody>${rows}</tbody></table>
@@ -610,7 +611,7 @@ function renderEx(){
     const list = all.filter(e => (EXM === "__done" ? done.has(e.id) : !EXM || e.muscle === EXM) && words.every(w => norm(e.name + " " + e.muscle + " " + e.equip).includes(w)));
     const html = groups.map(m => { const es = list.filter(e => e.muscle === m).sort((a, b) => a.name.localeCompare(b.name, "fr")); if (!es.length) return "";
       return `<section class="grp"><div class="grp-h">${muscleMap(m, [])}<b>${esc(m)}</b><span>${es.length}</span></div><ul class="exlist">${es.map(e => { const hs = done.has(e.id) ? exHistory(e.id) : []; const best = hs.length ? Math.max(...hs.map(x => x.e1)) : 0;
-        return `<li><button class="exr" data-exd="${esc(e.id)}"><span class="thumb">${figSVG(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${esc(e.equip)}${hs.length ? ` · ${pl(hs.length, "séance")}` : ""}</span></span>${best ? `<span class="ex-m">1RM est.<b>${f1(best)} kg</b></span>` : ""}</button></li>`; }).join("")}</ul></section>`; }).join("");
+        return `<li><button class="exr" data-exd="${esc(e.id)}"><span class="thumb">${exThumb(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${esc(e.equip)}${hs.length ? ` · ${pl(hs.length, "séance")}` : ""}</span></span>${best ? `<span class="ex-m">1RM est.<b>${f1(best)} kg</b></span>` : ""}</button></li>`; }).join("")}</ul></section>`; }).join("");
     $("#exList").innerHTML = html || `<div class="card" style="margin-top:14px"><p class="empty">Aucun exercice trouvé.</p></div>`; };
   draw();
   $("#exQ").addEventListener("input", e => { EXQ = e.target.value; draw(); });
@@ -631,7 +632,7 @@ function lineChart(pts, unit){
 function openExDetail(exId){
   const e = exById(exId), hs = exHistory(exId), k = e.kind, info = figInfo(e);
   let h = `<p class="note-s" style="margin:-6px 0 12px">${esc(e.muscle)} · ${esc(e.equip)}${e.custom ? " · exercice perso" : ""}</p>
-    <div class="fig-hero"><div class="fig-box"><span class="tag">Mouvement</span>${figSVG(e, {anim:true})}</div><div class="fig-box"><span class="tag">Muscles</span>${muscleMap(e.muscle, info.sec)}<div class="legend-m"><span><i></i>principal</span>${info.sec && info.sec.length ? `<span><i class="s"></i>secondaire</span>` : ""}</div></div></div>
+    ${exHero(e)}<div class="ex-info"><div class="mm-box">${muscleMap(e.muscle, info.sec)}</div><div class="ex-facts"><div><span>Muscle principal</span><b>${esc(e.muscle)}</b></div>${info.sec && info.sec.length ? `<div><span>Secondaires</span><b>${info.sec.map(esc).join(", ")}</b></div>` : ""}<div><span>Matériel</span><b>${esc(e.equip)}</b></div></div></div>
     <div class="sec-t" style="margin-top:4px">Consignes</div><ul class="tips">${(info.tips || []).map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
   if (DB.active && !DB.active.exercises.some(x => x.exId === exId)) h += `<button class="btn pri wide" style="margin-top:12px" data-addlive="${esc(exId)}">${IC.plus} Ajouter à la séance en cours</button>`;
   h += `<div class="sec-t">Ta progression</div>`;
@@ -648,6 +649,81 @@ function openExDetail(exId){
   }
   if (e.custom) h += `<div class="btns" style="margin-top:14px"><button class="btn danger line" data-delex="${esc(e.id)}">Supprimer cet exercice perso</button></div>`;
   openOv(e.name, h);
+}
+
+/* ---------- Mon profil ---------- */
+const MEAS = [
+  ["weight","Poids","kg","Le matin, à jeun, sur la même balance."],
+  ["bodyfat","Masse grasse","%","Toujours avec la même méthode (balance ou pince)."],
+  ["neck","Tour de cou","cm","Sous la pomme d'Adam, mètre bien horizontal."],
+  ["shoulders","Tour d'épaules","cm","Au plus large des épaules, bras relâchés."],
+  ["chest","Tour de poitrine","cm","Sous les aisselles, à mi-souffle."],
+  ["biceps","Tour de biceps","cm","Bras contracté, au plus gros, toujours le même bras."],
+  ["forearm","Tour d'avant-bras","cm","Au plus large, poing serré."],
+  ["wrist","Tour de poignet","cm","Juste au-dessus de l'os."],
+  ["waist","Tour de taille","cm","Au nombril, ventre relâché."],
+  ["hips","Tour de hanches","cm","Au plus large des fessiers, pieds joints."],
+  ["thigh","Tour de cuisse","cm","Au plus gros, juste sous le pli fessier."],
+  ["calf","Tour de mollet","cm","Au plus gros, debout."]
+];
+let PROF = "corps";
+const lastMeas = k => { const m = DB.measures.filter(x => x[k] != null).sort((a, b) => b.date.localeCompare(a.date)); return m; };
+function ageOf(b){ if (!b) return null; const d = pDate(b), n = new Date(); let a = n.getFullYear() - d.getFullYear(); if (n.getMonth() < d.getMonth() || (n.getMonth() === d.getMonth() && n.getDate() < d.getDate())) a--; return a; }
+const fmtv = (v, u) => `${f1(v)}${u === "%" ? " %" : " " + u}`;
+function spark(vals){ if (vals.length < 2) return ""; const lo = Math.min(...vals), hi = Math.max(...vals), r = hi - lo || 1;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * 60).toFixed(1)},${(18 - (v - lo) / r * 16).toFixed(1)}`).join(" ");
+  return `<svg class="spark" viewBox="0 -1 60 21"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
+function renderProfile(){
+  $("#viewTitle").textContent = "Mon profil"; $("#viewSub").textContent = "Ton corps, tes mensurations et tes progrès";
+  let h = `<div class="seg full" style="margin-bottom:14px"><button data-prof="corps" aria-pressed="${PROF === "corps"}">Corps</button><button data-prof="progres" aria-pressed="${PROF === "progres"}">Progrès</button></div>`;
+  if (PROF === "progres") { renderStats(); $("#viewTitle").textContent = "Mon profil"; $("#viewSub").textContent = "Ton corps, tes mensurations et tes progrès"; $("#view").insertAdjacentHTML("afterbegin", h); return; }
+  const P = DB.profile, age = ageOf(P.birth), w = lastMeas("weight"), wNow = w[0] && w[0].weight;
+  const ini = (P.name || "?").trim().slice(0, 1).toUpperCase();
+  const facts = [age != null ? `${age} ans` : "", P.height ? `${(P.height / 100).toFixed(2).replace(".", ",")} m` : "", wNow ? fmtv(wNow, "kg") : ""].filter(Boolean).join(" · ");
+  h += `<div class="card prof-c"><div class="avatar">${esc(ini)}</div><div style="flex:1;min-width:0"><b class="prof-n">${esc(P.name || "Ton profil")}</b><p class="note-s">${facts || "Ajoute ta taille, ton âge et ton poids"}</p>${(P.sports || []).length ? `<div class="meta" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">${P.sports.map(s => `<span class="pill on c-${s}">${SPORTS[s].label}</span>`).join("")}</div>` : ""}</div><button class="icon-btn sm" data-act="edit-prof" aria-label="Modifier le profil">${IC.edit}</button></div>`;
+  // poids
+  const wPrev30 = w.find(x => (pDate(w[0] ? w[0].date : todayISO()) - pDate(x.date)) / 864e5 >= 28);
+  const bmi = wNow && P.height ? wNow / Math.pow(P.height / 100, 2) : null;
+  h += `<div class="kpis"><div class="kpi"><b>${wNow ? f1(wNow) : "–"}</b><span>kg${wPrev30 ? ` · ${wNow - wPrev30.weight >= 0 ? "+" : "−"}${f1(Math.abs(wNow - wPrev30.weight))} en 1 mois` : ""}</span></div><div class="kpi"><b>${P.goal ? f1(P.goal) : "–"}</b><span>objectif (kg)${P.goal && wNow ? ` · ${f1(Math.abs(wNow - P.goal))} à ${wNow > P.goal ? "perdre" : "prendre"}` : ""}</span></div><div class="kpi"><b>${bmi ? f1(bmi) : "–"}</b><span>IMC</span></div></div>`;
+  if (w.length >= 2) h += `<div class="sec-t">Évolution du poids</div><div class="card">${lineChart(w.slice().reverse().map(x => ({d:x.date, v:x.weight})), "kg")}</div>`;
+  h += `<div class="sec-t">Mensurations <button class="link-btn" data-act="new-meas">+ Nouvelle mesure</button></div><div class="meas-g">`;
+  h += MEAS.map(([k, l, u]) => { const m = lastMeas(k); const v = m[0] && m[0][k], first = m.length > 1 ? m[m.length - 1] : null, dv = first ? v - first[k] : null;
+    return `<button class="meas" data-meas="${k}"><span class="ml">${esc(l)}</span><b>${v != null ? fmtv(v, u) : "–"}</b><span class="md">${dv != null ? `${dv >= 0 ? "+" : "−"}${f1(Math.abs(dv))} ${u} depuis le ${fDate(first.date).replace(/^\S+ /, "")}` : m.length ? fDate(m[0].date) : "Pas encore mesuré"}</span>${spark(m.slice(0, 12).reverse().map(x => x[k]))}</button>`; }).join("") + `</div>`;
+  h += `<button class="btn pri wide" style="margin-top:14px" data-act="new-meas">${IC.plus} Nouvelle mesure</button><p class="note-s" style="margin-top:10px;text-align:center">Mesure-toi le matin, toutes les 2 à 4 semaines, au même endroit à chaque fois.</p>`;
+  $("#view").innerHTML = h;
+}
+function openProfileForm(){
+  const P = DB.profile;
+  openOv("Mon profil", `<form class="f" id="pfF"><label class="fld"><span>Prénom</span><input id="pfName" value="${esc(P.name || "")}" autocomplete="given-name"></label>
+    <div class="row2"><label class="fld"><span>Date de naissance</span><input type="date" id="pfBirth" value="${esc(P.birth || "")}"></label><fieldset class="fld"><legend>Sexe</legend><div class="chips">${chips("sex", [["h","Homme"],["f","Femme"]], P.sex)}</div></fieldset></div>
+    <div class="row2"><label class="fld"><span>Taille (cm)</span><input inputmode="decimal" id="pfH" value="${P.height ?? ""}" placeholder="179"></label><label class="fld"><span>Poids objectif (kg)</span><input inputmode="decimal" id="pfG" value="${P.goal != null ? String(P.goal).replace(".", ",") : ""}"></label></div>
+    <fieldset class="fld"><legend>Mes sports</legend><div class="chips">${SPORT_KEYS.map(k => `<label><input type="checkbox" name="sp" value="${k}" ${(P.sports || []).includes(k) ? "checked" : ""}><span>${SPORTS[k].label}</span></label>`).join("")}</div></fieldset>
+    <button class="btn pri wide">Enregistrer</button></form>`);
+  $("#pfF").addEventListener("submit", e => { e.preventDefault();
+    Object.assign(DB.profile, {name:$("#pfName").value.trim(), birth:$("#pfBirth").value || null, sex:radioVal(e.target, "sex"), height:num($("#pfH").value), goal:num($("#pfG").value), sports:[...e.target.querySelectorAll("input[name=sp]:checked")].map(x => x.value)});
+    save(); closeOv(); render(); toast("Profil enregistré"); });
+}
+function openMeasForm(){
+  openOv("Nouvelle mesure", `<form class="f" id="msF"><label class="fld"><span>Date</span><input type="date" id="msDate" value="${todayISO()}"></label>
+    <p class="note-s" style="margin-top:-6px">Remplis seulement ce que tu as mesuré. En gris : ta dernière valeur.</p>
+    <div class="row2">${MEAS.map(([k, l, u, tip]) => { const m = lastMeas(k)[0]; return `<label class="fld"><span>${esc(l)} (${u})</span><input inputmode="decimal" data-mk="${k}" placeholder="${m ? f1(m[k]) : ""}" title="${esc(tip)}"></label>`; }).join("")}</div>
+    <details class="howto"><summary>Comment bien se mesurer</summary><ul>${MEAS.map(([k, l, u, tip]) => `<li><b>${esc(l)} :</b> ${esc(tip)}</li>`).join("")}</ul></details>
+    <p class="err" id="msErr" hidden></p><button class="btn pri wide">Enregistrer</button></form>`);
+  $("#msF").addEventListener("submit", e => { e.preventDefault(); const o = {id:uid(), date:$("#msDate").value || todayISO()}; let n = 0;
+    e.target.querySelectorAll("[data-mk]").forEach(i => { const v = num(i.value); if (v != null) { o[i.dataset.mk] = v; n++; } });
+    if (!n) { $("#msErr").textContent = "Renseigne au moins une valeur."; $("#msErr").hidden = false; return; }
+    DB.measures.push(o); save(); closeOv(); render(); toast("Mesure enregistrée"); });
+}
+function openMeasDetail(k){
+  const [, l, u, tip] = MEAS.find(x => x[0] === k), m = lastMeas(k);
+  let h = `<p class="note-s" style="margin:-6px 0 12px">${esc(tip)}</p>`;
+  if (!m.length) h += `<p class="empty">Pas encore de mesure.</p>`;
+  else { const first = m[m.length - 1], best = m[0];
+    h += `<div class="stats3"><div class="stat"><b>${f1(best[k])}</b><span>actuel (${u})</span></div><div class="stat"><b>${m.length > 1 ? (best[k] - first[k] >= 0 ? "+" : "−") + f1(Math.abs(best[k] - first[k])) : "–"}</b><span>depuis le début</span></div><div class="stat"><b>${m.length}</b><span>mesure${m.length > 1 ? "s" : ""}</span></div></div>`;
+    if (m.length >= 2) h += lineChart(m.slice().reverse().map(x => ({d:x.date, v:x[k]})), u);
+    h += `<table class="tbl" style="margin-top:10px"><tbody>${m.map(x => `<tr><td>${fDate(x.date)}</td><td><b>${fmtv(x[k], u)}</b></td><td style="text-align:right"><button class="btn small flat danger" data-delm="${esc(x.id)}|${k}">Supprimer</button></td></tr>`).join("")}</tbody></table>`; }
+  h += `<button class="btn pri wide" style="margin-top:14px" data-act="new-meas">${IC.plus} Nouvelle mesure</button>`;
+  openOv(l, h);
 }
 
 /* ---------- Progrès ---------- */
@@ -715,7 +791,7 @@ function openSettings(){
   <div class="menu"><p class="note-s">Tes ${n} séance${n > 1 ? "s" : ""} sont gardées sur ce téléphone. Exporte une sauvegarde de temps en temps (Drive, mail…) pour ne rien perdre si tu changes d'appareil.${DB.lastBackup ? ` Dernière : ${fDate(DB.lastBackup.slice(0, 10))}.` : ""}</p>
   <button class="btn" data-st="export">Exporter une sauvegarde</button><button class="btn" data-st="restore">Restaurer une sauvegarde</button>
   <button class="btn danger" data-st="wipe">Effacer toutes les données</button></div>
-  <p class="note-s" style="margin-top:16px">Mes Séances · version 1.0</p>`);
+  <p class="note-s" style="margin-top:16px">Biceps · version 3 · photos d'exercices : free-exercise-db (domaine public)</p>`);
   const f = $("#setF");
   f.addEventListener("change", () => { S.rest = +$("#stRest").value; S.theme = radioVal(f, "theme") || "auto"; S.sound = $("#stSound").checked; S.wake = $("#stWake").checked; save(); applyTheme(); });
   $("#ovBody").onclick = async e => { const b = e.target.closest("[data-st]"); if (!b) return; const a = b.dataset.st;
@@ -741,6 +817,8 @@ $("#fileIn").addEventListener("change", async e => { const file = e.target.files
       const rids = new Set(DB.routines.map(r => r.id)); (d.routines || []).forEach(r => { if (!rids.has(r.id)) DB.routines.push(r); });
       const cids = new Set(DB.customEx.map(c => c.id)); (d.customEx || []).forEach(c => { if (!cids.has(c.id)) DB.customEx.push(c); });
       DB.mvSkip = [...new Set(DB.mvSkip.concat(d.mvSkip || []))];
+      const mids = new Set(DB.measures.map(m => m.id)); (d.measures || []).forEach(m => { if (!mids.has(m.id)) DB.measures.push(m); });
+      if (d.profile && !DB.profile.name) DB.profile = d.profile; if (d.plans) DB.plans = Object.assign({}, d.plans, DB.plans);
       save(); closeOv(); render(); toast(`${add} séance${add > 1 ? "s" : ""} restaurée${add > 1 ? "s" : ""}`); }
   } catch (err) { toast(FILE_MODE === "hevy" ? "Fichier non reconnu : prends l'export CSV des séances Hevy." : "Sauvegarde illisible."); console.error(err); }
 });
@@ -800,8 +878,13 @@ document.addEventListener("click", e => {
     if (a === "settings") return openSettings();
     if (a === "more") { FEED_N += 30; return renderHome(); }
     if (a === "starter") return addStarter();
+    if (a === "edit-prof") return openProfileForm();
+    if (a === "new-meas") return openMeasForm();
     if (a === "new-routine") return openRoutine(null);
     if (a === "ex-new") return openNewEx(id => { closeOv(); renderEx(); openExDetail(id); }); }
+  const pf = t.closest("[data-prof]"); if (pf) { PROF = pf.dataset.prof; return render(); }
+  const ms = t.closest("[data-meas]"); if (ms) return openMeasDetail(ms.dataset.meas);
+  const dm = t.closest("[data-delm]"); if (dm) { if (!armConfirm(dm, "Confirmer")) return; const [id, k] = dm.dataset.delm.split("|"); const m = DB.measures.find(x => x.id === id); if (m) { delete m[k]; if (!MEAS.some(([kk]) => m[kk] != null)) DB.measures = DB.measures.filter(x => x !== m); } save(); render(); openMeasDetail(k); return; }
   const lf = t.closest("[data-lf]"); if (lf) { LOGF = lf.dataset.lf; FEED_N = 30; return render(); }
   const cal = t.closest("[data-cal]"); if (cal) { CALM = Math.min(0, CALM + +cal.dataset.cal); return renderLog(); }
   const ps = t.closest("[data-pseg]"); if (ps) { PSEG = ps.dataset.pseg; return render(); }
