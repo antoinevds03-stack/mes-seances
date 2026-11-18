@@ -513,7 +513,7 @@ form.f{display:flex;flex-direction:column;gap:14px}
 <div id="splash" aria-hidden="true"><video id="spVid" src="splash.mp4" muted playsinline autoplay preload="auto"></video><div class="sp-logo"><img src="logo-cut.png" alt=""><b>BICEPS</b></div></div>
 <script>(function(){var s=document.getElementById("splash"),v=document.getElementById("spVid"),done=false;
 function end(){if(done)return;done=true;s.classList.add("out");setTimeout(function(){s.remove()},600)}
-try{if(sessionStorage.getItem("spl")||matchMedia("(prefers-reduced-motion: reduce)").matches){s.remove();return}sessionStorage.setItem("spl","1")}catch(e){}
+try{if(matchMedia("(prefers-reduced-motion: reduce)").matches){s.remove();return}}catch(e){}
 v.addEventListener("ended",function(){setTimeout(end,250)});v.addEventListener("error",function(){setTimeout(end,1200)});
 s.addEventListener("click",end);setTimeout(end,3600);var p=v.play();if(p&&p.catch)p.catch(function(){setTimeout(end,1600)});})();</script>
 <div class="app" id="app">
