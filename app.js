@@ -76,9 +76,9 @@ function toast(msg){ let t = $("#toast"); if (!t) { t = document.createElement("
   t.classList.toggle("up", !$("#live").hidden); t.textContent = msg; t.hidden = false; clearTimeout(toast.tm); toast.tm = setTimeout(() => t.hidden = true, 2800); }
 let ovOnClose = null;
 let ovSeq = 0;
-function openOv(title, html, onClose){ ovSeq++; const ov = $("#ov"), was = !ov.hidden; $("#ovBody").onclick = null; $("#ovBody").onchange = null; $("#ovTitle").textContent = title; $("#ovBody").innerHTML = html; ov.hidden = false; $("#ov .panel").scrollTop = 0; ovOnClose = onClose || null;
+function openOv(title, html, onClose){ ovSeq++; const ov = $("#ov"), was = !ov.hidden; if (!navState().ov) navPush("ov"); $("#ovBody").onclick = null; $("#ovBody").onchange = null; $("#ovTitle").textContent = title; $("#ovBody").innerHTML = html; ov.hidden = false; $("#ov .panel").scrollTop = 0; ovOnClose = onClose || null;
   if (was) ov.classList.add("show"); else requestAnimationFrame(() => requestAnimationFrame(() => ov.classList.add("show"))); }
-function closeOv(){ const ov = $("#ov"), my = ++ovSeq; ov.classList.remove("show"); const f = ovOnClose; ovOnClose = null; setTimeout(() => { if (my === ovSeq) { ov.hidden = true; $("#ovBody").innerHTML = ""; } }, 300); if (f) f(); }
+function closeOv(fromPop){ const ov = $("#ov"), my = ++ovSeq; if (!fromPop) setTimeout(() => { if (my === ovSeq) navPopIf("ov"); }, 0); ov.classList.remove("show"); const f = ovOnClose; ovOnClose = null; setTimeout(() => { if (my === ovSeq) { ov.hidden = true; $("#ovBody").innerHTML = ""; } }, 300); if (f) f(); }
 $("#ov").addEventListener("click", e => { if (e.target.id === "ov" || e.target.closest("[data-close]")) closeOv(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#ov").hidden) closeOv(); });
 const chips = (name, entries, val) => entries.map(([v, l]) => `<label><input type="radio" name="${name}" value="${esc(v)}" ${String(v) === String(val ?? "") ? "checked" : ""}><span>${esc(l)}</span></label>`).join("");
@@ -129,7 +129,7 @@ function wTitle(w){
 
 /* ---------- Navigation ---------- */
 let TAB = "home";
-document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => { if (TAB === b.dataset.tab) { window.scrollTo({top:0, behavior:"smooth"}); return; } TAB = b.dataset.tab; render(); window.scrollTo(0, 0); }));
+document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => { if (TAB === b.dataset.tab) { window.scrollTo({top:0, behavior:"smooth"}); return; } const was = TAB; TAB = b.dataset.tab; if (TAB === "home") { if (navState().tab) navPopIf("tab"); } else if (was === "home") navPush("tab"); render(); window.scrollTo(0, 0); }));
 function render(){
   document.querySelectorAll(".nav button").forEach(b => { if (b.dataset.tab === TAB) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   ({home:renderHome, log:renderLog, plans:renderPlans, ex:renderEx, stats:renderProfile})[TAB]();
@@ -391,8 +391,8 @@ function editMuscu(w){
   save(); closeOv(); showLive();
 }
 let tickT = null, wakeLock = null;
-function showLive(){ $("#fab").hidden = true; $("#live").hidden = false; document.body.style.overflow = "hidden"; drawLive(); clearInterval(tickT); tickT = setInterval(tickLive, 1000); keepAwake(); }
-function hideLive(){ $("#fab").hidden = false; $("#live").hidden = true; document.body.style.overflow = ""; clearInterval(tickT); releaseAwake(); render(); }
+function showLive(){ if (!navState().live) navPush("live"); $("#fab").hidden = true; $("#live").hidden = false; document.body.style.overflow = "hidden"; drawLive(); clearInterval(tickT); tickT = setInterval(tickLive, 1000); keepAwake(); }
+function hideLive(fromPop){ if (!fromPop && navState().live && !navState().ov) navPopIf("live"); $("#fab").hidden = false; $("#live").hidden = true; document.body.style.overflow = ""; clearInterval(tickT); releaseAwake(); render(); }
 async function keepAwake(){ if (!DB.settings.wake || !("wakeLock" in navigator) || !DB.active || DB.active.editOf) return; try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {} }
 function releaseAwake(){ try { wakeLock && wakeLock.release(); } catch (e) {} wakeLock = null; }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { if (!$("#live").hidden) keepAwake(); restTick(); } });
@@ -514,7 +514,7 @@ function finishLive(){
     if ($("#finRt") && $("#finRt").checked) r.items = exs.map(ex => ({exId:ex.exId, sets:ex.sets.length, rest:ex.rest}));
     const k = DB.workouts.findIndex(x => x.id === w.id); if (k >= 0) DB.workouts[k] = w; else DB.workouts.push(w);
     const rr = A.routineId && DB.routines.find(x => x.id === A.routineId); if (!A.editOf && rr && rr.prog && DB.plans.muscu && DB.plans.muscu.id === rr.prog) DB.plans.muscu.n++;
-    DB.active = null; save(); stopRest(); closeOv(); hideLive(); TAB = "home"; render(); toast(prs.length ? "Séance enregistrée, avec un record !" : "Séance enregistrée"); });
+    DB.active = null; save(); stopRest(); { const d = navState().d || 0; if (d) { ignorePop++; history.go(-d); } } closeOv(true); hideLive(true); TAB = "home"; render(); toast(prs.length ? "Séance enregistrée, avec un record !" : "Séance enregistrée"); });
 }
 
 /* ---------- Minuteur de repos ---------- */
@@ -910,6 +910,34 @@ document.addEventListener("click", e => {
   const dx = t.closest("[data-delex]"); if (dx) { const used = DB.workouts.some(w => (w.exercises || []).some(ex => ex.exId === dx.dataset.delex)); if (used) { toast("Exercice utilisé dans des séances : il est gardé."); return; } if (!armConfirm(dx, "Confirmer")) return; DB.customEx = DB.customEx.filter(c => c.id !== dx.dataset.delex); save(); closeOv(); render(); }
 });
 $("#setBtn").addEventListener("click", openSettings);
+
+
+/* ---------- Navigation tactile : retour Android, glisser vers le bas, glisser depuis le bord gauche ---------- */
+let ignorePop = 0;
+const navState = () => history.state || {};
+function navPush(k){ try { history.pushState(Object.assign({}, navState(), {[k]:1, d:(navState().d || 0) + 1}), ""); } catch (e) {} }
+function navPopIf(k){ if (navState()[k]) { ignorePop++; history.back(); } }
+window.addEventListener("popstate", () => {
+  if (ignorePop) { ignorePop--; return; }
+  if (!$("#ov").hidden && $("#ov").classList.contains("show")) { closeOv(true); return; }
+  if (!$("#live").hidden) { hideLive(true); return; }
+  if (TAB !== "home") { TAB = "home"; render(); window.scrollTo(0, 0); }
+});
+function goBack(){ if (navState().d) history.back(); else if (!$("#ov").hidden) closeOv(); else if (!$("#live").hidden) hideLive(); else if (TAB !== "home") { TAB = "home"; render(); } }
+// Fiche : glisser vers le bas pour fermer
+(() => { const panel = $("#ov .panel"); let y0 = null, dy = 0, t0 = 0;
+  panel.addEventListener("touchstart", e => { if (e.touches.length !== 1) return; const onHead = e.target.closest(".grab, .panel-head"); if (!onHead && panel.scrollTop > 0) { y0 = null; return; } if (e.target.closest("input, textarea, select, .hscroll, .filters, .chips, canvas")) { y0 = null; return; } y0 = e.touches[0].clientY; dy = 0; t0 = Date.now(); }, {passive:true});
+  panel.addEventListener("touchmove", e => { if (y0 == null) return; dy = e.touches[0].clientY - y0; if (dy <= 0) { panel.style.transform = ""; return; } if (panel.scrollTop > 0 && !e.target.closest(".grab, .panel-head")) { y0 = null; panel.style.transform = ""; return; }
+    panel.style.transition = "none"; panel.style.transform = `translateY(${dy}px)`; $("#ov").style.opacity = String(Math.max(.35, 1 - dy / 600)); }, {passive:true});
+  panel.addEventListener("touchend", () => { if (y0 == null) return; const v = dy / Math.max(1, Date.now() - t0); panel.style.transition = ""; $("#ov").style.opacity = "";
+    if (dy > 110 || (dy > 40 && v > .6)) { panel.style.transform = "translateY(100%)"; setTimeout(() => { panel.style.transform = ""; }, 320); closeOv(); } else panel.style.transform = ""; y0 = null; }, {passive:true});
+})();
+// Bord gauche : glisser vers la droite = retour (utile sur iPhone)
+(() => { let x0 = null, y0 = 0, el = null;
+  document.addEventListener("touchstart", e => { const t = e.touches[0]; if (e.touches.length === 1 && t.clientX < 28) { x0 = t.clientX; y0 = t.clientY; el = !$("#ov").hidden ? $("#ov .panel") : !$("#live").hidden ? $("#live") : $("#app"); } else x0 = null; }, {passive:true});
+  document.addEventListener("touchmove", e => { if (x0 == null) return; const dx = e.touches[0].clientX - x0, dyy = Math.abs(e.touches[0].clientY - y0); if (dyy > dx) { x0 = null; el.style.transform = ""; return; } if (dx > 0) { el.style.transition = "none"; el.style.transform = `translateX(${Math.min(dx, 160) * .6}px)`; } }, {passive:true});
+  document.addEventListener("touchend", e => { if (x0 == null) return; const dx = (e.changedTouches[0] || {}).clientX - x0; el.style.transition = "transform .25s"; el.style.transform = ""; setTimeout(() => { el.style.transition = ""; }, 260); x0 = null; if (dx > 80) goBack(); }, {passive:true});
+})();
 
 /* ---------- Démarrage ---------- */
 render();
