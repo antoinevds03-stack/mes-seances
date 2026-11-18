@@ -388,7 +388,7 @@ function startMuscu(routineId, fromWorkout){
   const r = routineId && DB.routines.find(x => x.id === routineId);
   DB.active = {id:uid(), title:r ? r.name : fromWorkout ? fromWorkout.title : "Séance de muscu", routineId:r ? r.id : (fromWorkout && fromWorkout.routineId) || null, startTs:Date.now(), editOf:null,
     exercises:r ? r.items.map(it => newExEntry(it.exId, it.sets, it.rest, null, it.reps)) : fromWorkout ? fromWorkout.exercises.map(ex => newExEntry(ex.exId, ex.sets.length, ex.rest, ex.sets)) : []};
-  save(); closeOv(); showLive(); if (!DB.active.exercises.length) addExercisesLive();
+  save(); closeOv(); showLive(); askNotif(); if (!DB.active.exercises.length) addExercisesLive();
 }
 function editMuscu(w){
   if (DB.active) { toast("Termine d'abord la séance en cours."); return; }
@@ -450,7 +450,7 @@ liveIn.addEventListener("click", e => {
     if (a === "min") return hideLive();
     if (a === "addex") return addExercisesLive();
     if (a === "finish") return finishLive();
-    if (a === "cancel") { if (!armConfirm(lv, A.editOf ? "Confirmer : rien ne sera modifié" : "Confirmer l'abandon")) return; DB.active = null; save(); stopRest(); hideLive(); toast(A.editOf ? "Modifications annulées" : "Séance abandonnée"); return; } }
+    if (a === "cancel") { if (!armConfirm(lv, A.editOf ? "Confirmer : rien ne sera modifié" : "Confirmer l'abandon")) return; DB.active = null; save(); closeLiveNotif(); stopRest(); hideLive(); toast(A.editOf ? "Modifications annulées" : "Séance abandonnée"); return; } }
   const card = e.target.closest(".exc"); if (!card) return; const i = +card.dataset.i, ex = A.exercises[i], kind = exById(ex.exId).kind;
   const x = e.target.closest("[data-x]");
   if (x) { const a = x.dataset.x;
@@ -470,7 +470,7 @@ liveIn.addEventListener("click", e => {
       if (!okv && kind !== "kg") { toast("Indique d'abord la valeur de la série."); return; }
       if (kind === "kg" && s.reps == null) { toast("Indique d'abord le nombre de reps."); return; }
       if (kind === "kg" && s.kg == null) s.kg = 0;
-      s.done = true; save(); drawLive(); if (ex.rest) startRest(ex.rest, exById(ex.exId).name);
+      s.done = true; save(); drawLive(); liveNotif(); if (ex.rest) startRest(ex.rest, exById(ex.exId).name);
       if (navigator.vibrate && DB.settings.sound) navigator.vibrate(30);
     } else { s.done = false; save(); drawLive(); }
   }
@@ -520,8 +520,27 @@ function finishLive(){
     if ($("#finRt") && $("#finRt").checked) r.items = exs.map(ex => ({exId:ex.exId, sets:ex.sets.length, rest:ex.rest}));
     const k = DB.workouts.findIndex(x => x.id === w.id); if (k >= 0) DB.workouts[k] = w; else DB.workouts.push(w);
     const rr = A.routineId && DB.routines.find(x => x.id === A.routineId); if (!A.editOf && rr && rr.prog && DB.plans.muscu && DB.plans.muscu.id === rr.prog) DB.plans.muscu.n++;
-    DB.active = null; save(); stopRest(); { const d = navState().d || 0; if (d) { ignorePop++; history.go(-d); } } closeOv(true); hideLive(true); TAB = "home"; render(); toast(prs.length ? "Séance enregistrée, avec un record !" : "Séance enregistrée"); });
+    DB.active = null; save(); closeLiveNotif(); stopRest(); { const d = navState().d || 0; if (d) { ignorePop++; history.go(-d); } } closeOv(true); hideLive(true); TAB = "home"; render(); toast(prs.length ? "Séance enregistrée, avec un record !" : "Séance enregistrée"); });
 }
+
+
+/* ---------- Notification de séance en cours (reste dans le volet des notifications) ---------- */
+const hm = ts => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+async function liveNotif(){
+  try {
+    if (DB.settings.liveNotif === false || !("Notification" in window) || Notification.permission !== "granted" || !navigator.serviceWorker) return;
+    const A = DB.active; if (!A || A.editOf) return closeLiveNotif();
+    const reg = await navigator.serviceWorker.ready, st = liveStats();
+    const next = A.exercises.find(ex => ex.sets.some(s => !s.done)), nx = next && exById(next.exId), left = next ? next.sets.filter(s => !s.done).length : 0;
+    const lines = [`Démarrée à ${hm(A.startTs)} · ${pl(st.sets, "série")} · ${fInt(st.vol)} kg`];
+    if (REST && REST.end > Date.now()) lines.unshift(`⏱ Repos jusqu'à ${hm(REST.end)}:${pad(new Date(REST.end).getSeconds())}`);
+    lines.push(next ? `À suivre : ${nx.name} (${pl(left, "série")})` : "Toutes les séries sont faites : pense à terminer");
+    await reg.showNotification(`${A.title || "Séance en cours"} · en cours`, {tag:"live", body:lines.join("\n"), icon:"icon-192.png", badge:"badge.png", silent:true, renotify:false, requireInteraction:true, timestamp:A.startTs, data:{url:"./?live=1"}, actions:[{action:"open", title:"Ouvrir la séance"}]});
+  } catch (e) {}
+}
+async function closeLiveNotif(){ try { const reg = await navigator.serviceWorker.ready; (await reg.getNotifications({tag:"live"})).forEach(n => n.close()); } catch (e) {} }
+async function askNotif(){ try { if ("Notification" in window && Notification.permission === "default" && DB.settings.liveNotif !== false) await Notification.requestPermission(); } catch (e) {} liveNotif(); }
+document.addEventListener("visibilitychange", () => { if (document.hidden && DB.active) liveNotif(); });
 
 /* ---------- Minuteur de repos ---------- */
 let REST = null, restT = null, actx = null;
@@ -529,8 +548,8 @@ function unlockAudio(){ if (actx || !DB.settings.sound) return; try { actx = new
 function beep(){ if (!DB.settings.sound) return; try { unlockAudio(); if (!actx) return; if (actx.state === "suspended") actx.resume();
   [0, .22, .44].forEach((t, i) => { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = i === 2 ? 1320 : 880; o.connect(g); g.connect(actx.destination);
     const t0 = actx.currentTime + t; g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(.35, t0 + .02); g.gain.exponentialRampToValueAtTime(.0001, t0 + .18); o.start(t0); o.stop(t0 + .2); }); } catch (e) {} }
-function startRest(sec, label){ REST = {end:Date.now() + sec*1000, total:sec, label}; $("#restbar").hidden = false; $("#rbLabel").textContent = "Repos · " + label; clearInterval(restT); restT = setInterval(restTick, 250); restTick(); }
-function stopRest(){ REST = null; clearInterval(restT); $("#restbar").hidden = true; }
+function startRest(sec, label){ REST = {end:Date.now() + sec*1000, total:sec, label}; setTimeout(liveNotif, 50); $("#restbar").hidden = false; $("#rbLabel").textContent = "Repos · " + label; clearInterval(restT); restT = setInterval(restTick, 250); restTick(); }
+function stopRest(){ REST = null; clearInterval(restT); $("#restbar").hidden = true; if (DB.active) liveNotif(); else closeLiveNotif(); }
 function restTick(){ if (!REST) return; const left = (REST.end - Date.now())/1000;
   if (left <= 0) { const lab = REST.label; stopRest(); beep(); if (navigator.vibrate && DB.settings.sound) navigator.vibrate([250, 120, 250]);
     if (document.hidden && "Notification" in window && Notification.permission === "granted" && navigator.serviceWorker) navigator.serviceWorker.ready.then(r => r.showNotification("Repos terminé", {body:"À toi : " + lab, tag:"rest", icon:"icon-192.png", vibrate:[250,120,250]})).catch(() => {});
@@ -808,6 +827,7 @@ function openSettings(){
     <label class="fld"><span>Repos par défaut entre les séries</span><select id="stRest">${[30,45,60,75,90,105,120,150,180].map(s => `<option value="${s}" ${s === S.rest ? "selected" : ""}>${fClock(s)}</option>`).join("")}</select></label>
     <fieldset class="fld"><legend>Thème</legend><div class="chips">${chips("theme", [["auto","Auto"],["light","Clair"],["dark","Sombre"]], S.theme)}</div></fieldset>
     <label style="display:flex;gap:8px;align-items:center;font-size:15px"><input type="checkbox" id="stSound" ${S.sound ? "checked" : ""}> Bip et vibration à la fin du repos</label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:15px"><input type="checkbox" id="stLn" ${S.liveNotif !== false ? "checked" : ""}> Notification de séance en cours (volet des notifications)</label>
     <label style="display:flex;gap:8px;align-items:center;font-size:15px"><input type="checkbox" id="stWake" ${S.wake ? "checked" : ""}> Garder l'écran allumé pendant la séance</label>
     ${"Notification" in window && Notification.permission !== "granted" ? `<button type="button" class="btn small" data-st="notif">Prévenir aussi quand l'appli est en arrière-plan</button>` : ""}
   </form>
@@ -821,7 +841,7 @@ function openSettings(){
   <button class="btn danger" data-st="wipe">Effacer toutes les données</button></div>
   <p class="note-s" style="margin-top:16px">Biceps · version 3 · photos d'exercices : free-exercise-db (domaine public)</p>`);
   const f = $("#setF");
-  f.addEventListener("change", () => { S.rest = +$("#stRest").value; S.theme = radioVal(f, "theme") || "auto"; S.sound = $("#stSound").checked; S.wake = $("#stWake").checked; save(); applyTheme(); });
+  f.addEventListener("change", () => { S.rest = +$("#stRest").value; S.theme = radioVal(f, "theme") || "auto"; S.sound = $("#stSound").checked; S.wake = $("#stWake").checked; S.liveNotif = $("#stLn").checked; if (!S.liveNotif) closeLiveNotif(); else askNotif(); save(); applyTheme(); });
   $("#ovBody").onclick = async e => { const b = e.target.closest("[data-st]"); if (!b) return; const a = b.dataset.st;
     if (a === "notif") { try { const p = await Notification.requestPermission(); toast(p === "granted" ? "Notifications activées" : "Notifications refusées"); } catch (er) {} if (b.isConnected) b.remove(); }
     if (a === "hevy") { FILE_MODE = "hevy"; $("#fileIn").accept = ".csv,text/csv"; $("#fileIn").click(); }
@@ -973,5 +993,6 @@ function goBack(){ if (navState().d) history.back(); else if (!$("#ov").hidden) 
 
 /* ---------- Démarrage ---------- */
 render();
-if (DB.active && !DB.active.editOf) showLive();
-if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+if (DB.active && !DB.active.editOf) { showLive(); liveNotif(); }
+if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", e => { if (e.data && e.data.type === "open-live" && DB.active && $("#live").hidden) showLive(); });
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(() => {});
