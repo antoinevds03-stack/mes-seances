@@ -58,10 +58,10 @@ const SPORT_KEYS = Object.keys(SPORTS);
 
 /* ---------- Données ---------- */
 const KEY = "messeances.data";
-const DEF = () => ({v:1, workouts:[], routines:[], customEx:[], plans:{}, profile:{}, measures:[], customPrograms:[], settings:{rest:90, theme:"auto", sound:true, wake:true}, active:null, mvSkip:[], lastBackup:null});
+const DEF = () => ({v:1, workouts:[], routines:[], customEx:[], plans:{}, profile:{}, measures:[], customPrograms:[], favEx:[], settings:{rest:90, theme:"auto", sound:true, wake:true}, active:null, mvSkip:[], lastBackup:null});
 let DB = DEF();
 try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v) DB = Object.assign(DEF(), s, {settings:Object.assign(DEF().settings, s.settings || {})}); } catch (e) {}
-if (!DB.plans) DB.plans = {}; if (!DB.profile) DB.profile = {}; if (!DB.measures) DB.measures = []; if (!DB.customPrograms) DB.customPrograms = [];
+if (!DB.plans) DB.plans = {}; if (!DB.profile) DB.profile = {}; if (!DB.measures) DB.measures = []; if (!DB.customPrograms) DB.customPrograms = []; if (!DB.favEx) DB.favEx = [];
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(DB)); return true; } catch (e) { toast("Mémoire pleine : exporte une sauvegarde puis supprime d'anciennes séances."); return false; } }
 const sortW = a => a.sort((x, y) => (y.date + (y.time||"")).localeCompare(x.date + (x.time||"")));
 
@@ -111,8 +111,8 @@ function lastPerf(exId, skipId){
 }
 function exHistory(exId){
   return sortW(DB.workouts.filter(w => w.sport === "muscu")).map(w => { const ex = (w.exercises || []).find(e => e.exId === exId); if (!ex) return null;
-    const b = bestSet(ex); let mx = 0, vol = 0, reps = 0, sec = 0, min = 0, km = 0; workSets(ex).forEach(s => { mx = Math.max(mx, s.kg || 0); vol += (s.kg||0)*(s.reps||0); reps = Math.max(reps, s.reps || 0); sec = Math.max(sec, s.sec || 0); min += s.min ?? (s.sec ? s.sec / 60 : 0); km += s.km || 0; });
-    return {w, ex, e1:b ? b.v : 0, best:b ? b.s : null, max:mx, vol, reps, sec, min, km}; }).filter(Boolean);
+    const b = bestSet(ex); let mx = 0, vol = 0, reps = 0, sec = 0, min = 0, km = 0, steps = 0; workSets(ex).forEach(s => { mx = Math.max(mx, s.kg || 0); vol += (s.kg||0)*(s.reps||0); reps = Math.max(reps, s.reps || 0); sec = Math.max(sec, s.sec || 0); min += s.min ?? (s.sec ? s.sec / 60 : 0); km += s.km || 0; steps += s.steps || 0; });
+    return {w, ex, e1:b ? b.v : 0, best:b ? b.s : null, max:mx, vol, reps, sec, min, km, steps}; }).filter(Boolean);
 }
 function wSummary(w){
   if (w.sport === "muscu") return {big:fDur(w.durMin), small:`${pl((w.exercises||[]).length, "exo")} · ${pl(wSets(w), "série")}`, sub:`${fInt(wVolume(w))} kg soulevés`};
@@ -237,7 +237,7 @@ function openWorkout(id){
   openOv(wTitle(w), h);
 }
 function setTxt(st, kind){
-  if (kind === "cardio") { const mn = st.min ?? (st.sec ? st.sec / 60 : 0); return `${f1(mn)} min${st.km ? ` · ${f1(st.km)} km` : ""}`; }
+  if (kind === "cardio") { const mn = st.min ?? (st.sec ? st.sec / 60 : 0); return `${f1(mn)} min${st.steps ? ` · ${fInt(st.steps)} marches` : st.km ? ` · ${f1(st.km)} km` : ""}`; }
   if (kind === "temps") return `${st.kg ? f1(st.kg) + " kg · " : ""}${fClock(st.sec || 0)}`;
   if (kind === "reps") return `${st.reps || 0} reps`;
   if (kind === "pdc") return `${st.kg ? "+" + f1(st.kg) + " kg × " : ""}${st.reps || 0} reps`;
@@ -347,24 +347,30 @@ function routineMenu(id){
 }
 
 /* ----- Sélecteur d'exercices ----- */
+const fireSVG = on => `<svg class="fire${on ? " on" : ""}" viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(12 10.6) scale(1.25) translate(-12 -9)"><g class="fl"><path d="M12 1.5c.6 2 2.6 2.9 2.6 5.3 0 1.6-1.2 2.9-2.6 2.9s-2.6-1.3-2.6-2.9c0-1.1.6-1.9 1.3-2.5.1.9.6 1.4 1.1 1.6-.4-1.4-.1-3 .2-4.4z"/><path d="M7.2 3.8c.3 1.1 1.5 1.6 1.5 2.9 0 .9-.7 1.5-1.5 1.5s-1.5-.6-1.5-1.5c0-.7.4-1.2.9-1.6 0 .5.3.8.5 1-.1-.8 0-1.6.1-2.3z"/><path d="M16.8 3.8c-.3 1.1-1.5 1.6-1.5 2.9 0 .9.7 1.5 1.5 1.5s1.5-.6 1.5-1.5c0-.7-.4-1.2-.9-1.6 0 .5-.3.8-.5 1 .1-.8 0-1.6-.1-2.3z"/></g></g><path class="ht" transform="translate(2.4 3.9) scale(.8)" d="M12 22c-.4 0-.8-.2-1.1-.5C6.4 17.6 3 14.8 3 11.4 3 9 4.9 7.2 7.2 7.2c1.9 0 3.6 1 4.8 2.6 1.2-1.6 2.9-2.6 4.8-2.6C19.1 7.2 21 9 21 11.4c0 3.4-3.4 6.2-7.9 10.1-.3.3-.7.5-1.1.5z"/></svg>`;
+const isFav = id => (DB.favEx || []).includes(id);
+function toggleFav(id){ DB.favEx = DB.favEx || []; const on = !isFav(id); DB.favEx = on ? DB.favEx.concat(id) : DB.favEx.filter(x => x !== id); save();
+  document.querySelectorAll(`[data-fav="${CSS.escape(id)}"]`).forEach(b => { b.innerHTML = fireSVG(on) + (b.dataset.label ? `<span>${on ? "Favori" : "Ajouter aux favoris"}</span>` : ""); b.setAttribute("aria-pressed", on); b.classList.remove("pop"); void b.offsetWidth; if (on) b.classList.add("pop"); });
+  if (navigator.vibrate && on) navigator.vibrate(15); toast(on ? "Ajouté à tes favoris 🔥" : "Retiré des favoris"); return on; }
+const favBtn = (id, label) => `<span role="button" tabindex="0" class="favb${label ? " lab" : ""}" data-fav="${esc(id)}" ${label ? 'data-label="1"' : ""} aria-pressed="${isFav(id)}" aria-label="Favori">${fireSVG(isFav(id))}${label ? `<span>${isFav(id) ? "Favori" : "Ajouter aux favoris"}</span>` : ""}</span>`;
 function openPicker(onDone, onBack, single){
   let q = "", mus = "", sel = [];
   const draw = () => {
     const words = norm(q).split(" ").filter(Boolean);
-    const list = allEx().filter(e => (!mus || e.muscle === mus) && words.every(w => norm(e.name + " " + e.muscle + " " + e.equip).includes(w)))
-      .sort((a, b) => a.name.localeCompare(b.name, "fr"));
-    $("#pkList").innerHTML = list.map(e => `<li><button type="button" class="exr" data-pk="${esc(e.id)}" aria-pressed="${sel.includes(e.id)}"><span class="thumb">${exThumb(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${esc(e.muscle)} · ${esc(e.equip)}</span></span>${single ? "" : `<span class="chk">${sel.includes(e.id) ? IC.check : ""}</span>`}</button></li>`).join("") || `<li style="padding:12px"><p class="empty">Aucun exercice. Crée-le avec le bouton ci-dessous.</p></li>`;
+    const list = allEx().filter(e => (mus === "__fav" ? isFav(e.id) : !mus || e.muscle === mus) && words.every(w => norm(e.name + " " + e.muscle + " " + e.equip).includes(w)))
+      .sort((a, b) => (isFav(b.id) - isFav(a.id)) || a.name.localeCompare(b.name, "fr"));
+    $("#pkList").innerHTML = list.map(e => `<li><button type="button" class="exr" data-pk="${esc(e.id)}" aria-pressed="${sel.includes(e.id)}"><span class="thumb">${exThumb(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${esc(e.muscle)} · ${esc(e.equip)}</span></span>${favBtn(e.id)}${single ? "" : `<span class="chk">${sel.includes(e.id) ? IC.check : ""}</span>`}</button></li>`).join("") || `<li style="padding:12px"><p class="empty">Aucun exercice. Crée-le avec le bouton ci-dessous.</p></li>`;
     $("#pkGo").textContent = sel.length ? `Ajouter ${sel.length} exercice${sel.length > 1 ? "s" : ""}` : "Choisis des exercices";
     $("#pkGo").disabled = !sel.length;
   };
   openOv(single ? "Remplacer par…" : "Ajouter des exercices", `<label class="search">${IC.search}<input id="pkQ" placeholder="Rechercher (squat, poulie, épaules…)" autocomplete="off"></label>
-    <div class="filters" id="pkF"><button type="button" class="fchip" aria-pressed="true" data-m="">Tous</button>${MUSCLES.map(m => `<button type="button" class="fchip" aria-pressed="false" data-m="${esc(m)}">${esc(m)}</button>`).join("")}</div>
+    <div class="filters" id="pkF"><button type="button" class="fchip" aria-pressed="true" data-m="">Tous</button><button type="button" class="fchip fav-chip" aria-pressed="false" data-m="__fav">${fireSVG(true)} Favoris</button>${MUSCLES.map(m => `<button type="button" class="fchip" aria-pressed="false" data-m="${esc(m)}">${esc(m)}</button>`).join("")}</div>
     <ul class="exlist" id="pkList"></ul><button type="button" class="btn small" style="margin-top:10px" data-act="pk-new">${IC.plus} Créer un exercice</button>
     <div style="position:sticky;bottom:-18px;background:var(--surface);padding:12px 0 4px;margin-top:6px;${single ? "display:none" : ""}"><button type="button" class="btn pri wide" id="pkGo">Choisis des exercices</button></div>`, onBack);
   draw();
   $("#pkQ").addEventListener("input", e => { q = e.target.value; draw(); });
   $("#pkF").addEventListener("click", e => { const b = e.target.closest("[data-m]"); if (!b) return; mus = b.dataset.m; $("#pkF").querySelectorAll(".fchip").forEach(x => x.setAttribute("aria-pressed", x === b)); draw(); });
-  $("#pkList").addEventListener("click", e => { const b = e.target.closest("[data-pk]"); if (!b) return; const id = b.dataset.pk;
+  $("#pkList").addEventListener("click", e => { const fv = e.target.closest("[data-fav]"); if (fv) { e.stopPropagation(); toggleFav(fv.dataset.fav); if (mus === "__fav") draw(); return; } const b = e.target.closest("[data-pk]"); if (!b) return; const id = b.dataset.pk;
     if (single) { ovOnClose = null; closeOv(); onDone([id]); return; }
     sel = sel.includes(id) ? sel.filter(x => x !== id) : sel.concat(id); draw(); });
   $("#pkGo").addEventListener("click", () => { ovOnClose = null; closeOv(); onDone(sel); });
@@ -423,12 +429,13 @@ function exCard(ex, i){
   const e = exById(ex.exId), prev = DB.active.editOf ? lastPerf(ex.exId, DB.active.editOf) : lastPerf(ex.exId), k = e.kind;
   let n = 0;
   if (k === "cardio") ex.sets.forEach(s => { if (s.min == null && s.sec) s.min = Math.round(s.sec / 6) / 10; });
-  const cols = k === "cardio" ? ["Durée (min)", "Distance (km)"] : k === "temps" ? ["Durée (s)"] : k === "reps" ? ["Reps"] : k === "pdc" ? ["+kg", "Reps"] : ["kg", "Reps"];
+  const steps = e.unit2 === "steps";
+  const cols = k === "cardio" ? ["Durée (min)", steps ? "Marches" : "Distance (km)"] : k === "temps" ? ["Durée (s)"] : k === "reps" ? ["Reps"] : k === "pdc" ? ["+kg", "Reps"] : ["kg", "Reps"];
   const rows = ex.sets.map((s, j) => { const lab = s.t === "w" ? "É" : s.t === "d" ? "D" : s.t === "f" ? "F" : String(++n);
     const p = prev && prev[j]; const ptxt = p ? (k === "cardio" ? setTxt(p, "cardio") : k === "temps" ? fClock(p.sec || 0) : k === "reps" ? `${p.reps || 0}` : `${p.kg ? f1(p.kg) : (k === "pdc" ? "0" : "–")} × ${p.reps || 0}`) : "–";
     const ph = (f) => { const v = p ? p[f] : (j > 0 ? ex.sets[j-1][f] : null); return v != null && v !== "" ? (DEC.has(f) ? f1(v) : v) : ""; };
     const inp = f => `<input inputmode="${DEC.has(f) ? "decimal" : "numeric"}" data-f="${f}" value="${s[f] != null ? esc(DEC.has(f) ? String(s[f]).replace(".", ",") : s[f]) : ""}" placeholder="${esc(ph(f))}" aria-label="${f}">`;
-    const cells = k === "cardio" ? inp("min") + "</td><td>" + inp("km") : k === "temps" ? inp("sec") : k === "reps" ? inp("reps") : inp("kg") + "</td><td>" + inp("reps");
+    const cells = k === "cardio" ? inp("min") + "</td><td>" + inp(steps ? "steps" : "km") : k === "temps" ? inp("sec") : k === "reps" ? inp("reps") : inp("kg") + "</td><td>" + inp("reps");
     return `<tr class="${s.done ? "done" : ""}" data-j="${j}"><td><button class="stype ${s.t}" data-s="type" aria-label="Type de série">${lab}</button></td><td><button class="prev" data-s="prev">${esc(ptxt)}</button></td><td>${cells}</td><td><button class="chkb" data-s="done" aria-label="Valider la série">${IC.check}</button></td><td><button class="del-set" data-s="del" aria-label="Supprimer la série">✕</button></td></tr>`; }).join("");
   return `<div class="exc" data-i="${i}"><div class="exc-h"><span class="thumb">${exThumb(e)}</span><button class="exn" data-x="hist">${esc(e.name)}<small>${esc(e.muscle)} · ${esc(e.equip)}</small></button><button class="icon-btn sm ghost" data-x="menu" aria-label="Options">${IC.more}</button></div>
     <div class="exc-sub"><button class="rest-chip" data-x="rest">${IC.clock} ${ex.rest ? "Repos " + fClock(ex.rest) : "Pas de repos"}</button>${ex.target ? `<span class="target">Objectif ${ex.sets.length} × ${esc(ex.target)}</span>` : ""}</div>
@@ -636,16 +643,22 @@ function renderEx(){
   const done = new Set(); DB.workouts.forEach(w => (w.exercises || []).forEach(ex => done.add(ex.exId)));
   const groups = MUSCLES.concat([...new Set(all.map(e => e.muscle))].filter(m => !MUSCLES.includes(m)));
   $("#view").innerHTML = `<label class="search">${IC.search}<input id="exQ" placeholder="Rechercher : squat, poulie, épaules…" value="${esc(EXQ)}" autocomplete="off"></label>
-    <div class="filters" id="exF"><button class="fchip" data-m="" aria-pressed="${!EXM}">Tous</button><button class="fchip" data-m="__done" aria-pressed="${EXM === "__done"}">Déjà faits</button>${groups.map(m => `<button class="fchip" data-m="${esc(m)}" aria-pressed="${EXM === m}">${esc(m)}</button>`).join("")}</div>
+    <div class="filters" id="exF"><button class="fchip" data-m="" aria-pressed="${!EXM}">Tous</button><button class="fchip fav-chip" data-m="__fav" aria-pressed="${EXM === "__fav"}">${fireSVG(true)} Favoris${(DB.favEx || []).length ? ` · ${DB.favEx.length}` : ""}</button><button class="fchip" data-m="__done" aria-pressed="${EXM === "__done"}">Déjà faits</button>${groups.map(m => `<button class="fchip" data-m="${esc(m)}" aria-pressed="${EXM === m}">${esc(m)}</button>`).join("")}</div>
     <div id="exList"></div><button class="btn small line" style="margin-top:16px" data-act="ex-new">${IC.plus} Créer un exercice</button>`;
   const draw = () => { const words = norm(EXQ).split(" ").filter(Boolean);
-    const list = all.filter(e => (EXM === "__done" ? done.has(e.id) : !EXM || e.muscle === EXM) && words.every(w => norm(e.name + " " + e.muscle + " " + e.equip).includes(w)));
-    const html = groups.map(m => { const es = list.filter(e => e.muscle === m).sort((a, b) => a.name.localeCompare(b.name, "fr")); if (!es.length) return "";
+    const list = all.filter(e => (EXM === "__fav" ? isFav(e.id) : EXM === "__done" ? done.has(e.id) : !EXM || e.muscle === EXM) && words.every(w => norm(e.name + " " + e.muscle + " " + e.equip).includes(w)));
+    const row = e => { const hs = done.has(e.id) ? exHistory(e.id) : []; const best = hs.length ? Math.max(...hs.map(x => x.e1)) : 0;
+        return `<li><button class="exr" data-exd="${esc(e.id)}"><span class="thumb">${exThumb(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${esc(e.muscle)} · ${esc(e.equip)}${hs.length ? ` · ${pl(hs.length, "séance")}` : ""}</span></span>${best ? `<span class="ex-m">1RM est.<b>${f1(best)} kg</b></span>` : ""}${favBtn(e.id)}</button></li>`; };
+    const favs = list.filter(e => isFav(e.id)).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    const favHtml = favs.length && EXM !== "__done" ? `<section class="grp"><div class="grp-h"><span class="fav-big">${fireSVG(true)}</span><b>Mes favoris</b><span>${favs.length}</span></div><ul class="exlist">${favs.map(row).join("")}</ul></section>` : (EXM === "__fav" ? `<div class="card" style="margin-top:14px"><p class="empty">Pas encore de favori. Touche le cœur en feu à côté d'un exercice pour l'ajouter ici.</p></div>` : "");
+    if (EXM === "__fav") { $("#exList").innerHTML = favHtml; return; }
+    const html = favHtml + groups.map(m => { const es = list.filter(e => e.muscle === m).sort((a, b) => a.name.localeCompare(b.name, "fr")); if (!es.length) return "";
       return `<section class="grp"><div class="grp-h">${muscleMap(m, [])}<b>${esc(m)}</b><span>${es.length}</span></div><ul class="exlist">${es.map(e => { const hs = done.has(e.id) ? exHistory(e.id) : []; const best = hs.length ? Math.max(...hs.map(x => x.e1)) : 0;
-        return `<li><button class="exr" data-exd="${esc(e.id)}"><span class="thumb">${exThumb(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${esc(e.equip)}${hs.length ? ` · ${pl(hs.length, "séance")}` : ""}</span></span>${best ? `<span class="ex-m">1RM est.<b>${f1(best)} kg</b></span>` : ""}</button></li>`; }).join("")}</ul></section>`; }).join("");
+        return `<li><button class="exr" data-exd="${esc(e.id)}"><span class="thumb">${exThumb(e)}</span><span class="ex-t"><b>${esc(e.name)}</b><span>${esc(e.equip)}${hs.length ? ` · ${pl(hs.length, "séance")}` : ""}</span></span>${best ? `<span class="ex-m">1RM est.<b>${f1(best)} kg</b></span>` : ""}${favBtn(e.id)}</button></li>`; }).join("")}</ul></section>`; }).join("");
     $("#exList").innerHTML = html || `<div class="card" style="margin-top:14px"><p class="empty">Aucun exercice trouvé.</p></div>`; };
   draw();
   $("#exQ").addEventListener("input", e => { EXQ = e.target.value; draw(); });
+  renderEx.redraw = draw;
   $("#exF").addEventListener("click", e => { const b = e.target.closest("[data-m]"); if (!b) return; EXM = b.dataset.m; $("#exF").querySelectorAll(".fchip").forEach(x => x.setAttribute("aria-pressed", x === b)); draw(); });
 }
 function lineChart(pts, unit){
@@ -662,21 +675,21 @@ function lineChart(pts, unit){
 }
 function openExDetail(exId){
   const e = exById(exId), hs = exHistory(exId), k = e.kind, info = figInfo(e);
-  let h = `<p class="note-s" style="margin:-6px 0 12px">${esc(e.muscle)} · ${esc(e.equip)}${e.custom ? " · exercice perso" : ""}</p>
+  let h = `<div style="display:flex;align-items:center;gap:10px;margin:-6px 0 12px"><p class="note-s" style="flex:1">${esc(e.muscle)} · ${esc(e.equip)}${e.custom ? " · exercice perso" : ""}</p>${favBtn(e.id, true)}</div>
     ${exHero(e)}<div class="ex-info"><div class="mm-box">${muscleMap(e.muscle, info.sec)}</div><div class="ex-facts"><div><span>Muscle principal</span><b>${esc(e.muscle)}</b></div>${info.sec && info.sec.length ? `<div><span>Secondaires</span><b>${info.sec.map(esc).join(", ")}</b></div>` : ""}<div><span>Matériel</span><b>${esc(e.equip)}</b></div></div></div>
     <div class="sec-t" style="margin-top:4px">Consignes</div><ul class="tips">${(info.tips || []).map(t => `<li>${esc(t)}</li>`).join("")}</ul>`;
   if (DB.active && !DB.active.exercises.some(x => x.exId === exId)) h += `<button class="btn pri wide" style="margin-top:12px" data-addlive="${esc(exId)}">${IC.plus} Ajouter à la séance en cours</button>`;
   h += `<div class="sec-t">Ta progression</div>`;
   if (!hs.length) h += `<p class="empty">Pas encore fait. Ta progression apparaîtra ici dès la première séance.</p>`;
   else {
-    const metric = k === "cardio" ? (hs.some(x => x.km) ? "km" : "min") : k === "kg" ? "e1" : k === "temps" ? "sec" : "reps";
+    const metric = k === "cardio" ? (e.unit2 === "steps" ? (hs.some(x => x.steps) ? "steps" : "min") : hs.some(x => x.km) ? "km" : "min") : k === "kg" ? "e1" : k === "temps" ? "sec" : "reps";
     const best = Math.max(...hs.map(x => x[metric])), mx = Math.max(...hs.map(x => x.max)), vol = Math.max(...hs.map(x => x.vol));
-    if (k === "cardio") h += `<div class="stats3"><div class="stat"><b>${fInt(hs.reduce((n, x) => n + x.min, 0))}</b><span>minutes au total</span></div><div class="stat"><b>${f1(Math.max(...hs.map(x => x.km)))}</b><span>meilleure distance (km)</span></div><div class="stat"><b>${hs.length}</b><span>séances</span></div></div>`; else
+    if (k === "cardio") h += `<div class="stats3"><div class="stat"><b>${fInt(hs.reduce((n, x) => n + x.min, 0))}</b><span>minutes au total</span></div>${e.unit2 === "steps" ? `<div class="stat"><b>${fInt(Math.max(...hs.map(x => x.steps)))}</b><span>record de marches</span></div>` : `<div class="stat"><b>${f1(Math.max(...hs.map(x => x.km)))}</b><span>meilleure distance (km)</span></div>`}<div class="stat"><b>${hs.length}</b><span>séances</span></div></div>`; else
     h += `<div class="stats3">${k === "kg" ? `<div class="stat"><b>${f1(best)}</b><span>1RM estimé (kg)</span></div><div class="stat"><b>${f1(mx)}</b><span>charge max (kg)</span></div><div class="stat"><b>${fInt(vol)}</b><span>meilleur volume</span></div>`
       : k === "temps" ? `<div class="stat"><b>${fClock(best)}</b><span>meilleur temps</span></div><div class="stat"><b>${hs.length}</b><span>séances</span></div><div class="stat"><b>${f1(mx)}</b><span>lest max (kg)</span></div>`
       : `<div class="stat"><b>${best}</b><span>reps max</span></div><div class="stat"><b>${hs.length}</b><span>séances</span></div><div class="stat"><b>${f1(mx)}</b><span>lest max (kg)</span></div>`}</div>`;
     const pts = hs.slice().reverse().map(x => ({d:x.w.date, v:x[metric]})).filter(p => p.v > 0);
-    if (pts.length >= 2) h += `<p class="note-s">${k === "cardio" ? (metric === "km" ? "Distance par séance (km)" : "Durée par séance (min)") : k === "kg" ? "1RM estimé (kg), meilleure série de chaque séance" : k === "temps" ? "Meilleur temps (s)" : "Reps max par séance"}</p>` + lineChart(pts, k === "kg" ? "kg" : k === "temps" ? "s" : "reps");
+    if (pts.length >= 2) h += `<p class="note-s">${k === "cardio" ? (metric === "km" ? "Distance par séance (km)" : metric === "steps" ? "Marches par séance" : "Durée par séance (min)") : k === "kg" ? "1RM estimé (kg), meilleure série de chaque séance" : k === "temps" ? "Meilleur temps (s)" : "Reps max par séance"}</p>` + lineChart(pts, k === "kg" ? "kg" : k === "temps" ? "s" : "reps");
     h += `<table class="tbl" style="margin-top:10px"><thead><tr><th>Date</th><th>Séries</th><th>Meilleure</th></tr></thead><tbody>${hs.slice(0, 15).map(x => `<tr><td>${fDate(x.w.date)}${(x.w.prs || []).includes(exId) ? ` <span class="pr">${IC.trophy}</span>` : ""}</td><td>${workSets(x.ex).length}</td><td>${x.best ? setTxt(x.best, k) : x.ex.sets[0] ? setTxt(x.ex.sets[0], k) : "–"}</td></tr>`).join("")}</tbody></table>`;
   }
   if (e.custom) h += `<div class="btns" style="margin-top:14px"><button class="btn danger line" data-delex="${esc(e.id)}">Supprimer cet exercice perso</button></div>`;
@@ -873,6 +886,7 @@ $("#fileIn").addEventListener("change", async e => { const file = e.target.files
       const cids = new Set(DB.customEx.map(c => c.id)); (d.customEx || []).forEach(c => { if (!cids.has(c.id)) DB.customEx.push(c); });
       DB.mvSkip = [...new Set(DB.mvSkip.concat(d.mvSkip || []))];
       const cpids = new Set(DB.customPrograms.map(p => p.id)); (d.customPrograms || []).forEach(p => { if (!cpids.has(p.id)) DB.customPrograms.push(p); });
+      DB.favEx = [...new Set((DB.favEx || []).concat(d.favEx || []))];
       const mids = new Set(DB.measures.map(m => m.id)); (d.measures || []).forEach(m => { if (!mids.has(m.id)) DB.measures.push(m); });
       if (d.profile && !DB.profile.name) DB.profile = d.profile; if (d.plans) DB.plans = Object.assign({}, d.plans, DB.plans);
       save(); closeOv(); render(); toast(`${add} séance${add > 1 ? "s" : ""} restaurée${add > 1 ? "s" : ""}`); }
@@ -963,6 +977,7 @@ document.addEventListener("click", e => {
   const st = t.closest("[data-start]"); if (st) { unlockAudio(); if ($("#ov").classList.contains("show") && st.closest("#ov")) { ovOnClose = null; } return st.dataset.start === "muscu" ? startMuscu(null) : openSportForm(st.dataset.start); }
   const rs = t.closest("[data-rstart]"); if (rs) { unlockAudio(); return startMuscu(rs.dataset.rstart); }
   const rm = t.closest("[data-rmenu]"); if (rm) return routineMenu(rm.dataset.rmenu);
+  const fv = t.closest("[data-fav]"); if (fv && !fv.closest("#pkList")) { e.preventDefault(); toggleFav(fv.dataset.fav); if (TAB === "ex" && renderEx.redraw && (EXM === "__fav" || !fv.closest("#ov"))) renderEx.redraw(); return; }
   const xd = t.closest("[data-exd]"); if (xd && !t.closest("#live")) return openExDetail(xd.dataset.exd);
   const ed = t.closest("[data-edit]"); if (ed) { const w = DB.workouts.find(x => x.id === ed.dataset.edit); return w.sport === "muscu" ? editMuscu(w) : openSportForm(w.sport, w); }
   const rd = t.closest("[data-redo]"); if (rd) { const w = DB.workouts.find(x => x.id === rd.dataset.redo); return startMuscu(null, w); }

@@ -419,6 +419,24 @@ form.f{display:flex;flex-direction:column;gap:14px}
 .sh-prev canvas{width:100%;height:100%;display:block}
 .sh-opts{display:flex;flex-direction:column;gap:8px}
 .sh-row{display:flex;gap:8px;align-items:center;font-size:14.5px}
+.fire{width:22px;height:22px;overflow:visible;display:block}
+.fire .ht{fill:none;stroke:currentColor;stroke-width:2.1;stroke-linejoin:round}
+.fire .fl path{fill:none;stroke:currentColor;stroke-width:1.2;stroke-linejoin:round;opacity:.5}
+.fire.on .ht{fill:#E5372B;stroke:#E5372B}
+.fire.on .fl path{fill:#FF8A1E;stroke:#FF8A1E;opacity:1}
+.fire.on .fl path:first-child{fill:#FFB52E;stroke:#FFB52E}
+.favb{flex:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:36px;height:36px;border-radius:50%;color:var(--muted);cursor:pointer;transition:background .2s}
+.favb:active{background:var(--surface-2)}
+.favb.lab{width:auto;height:38px;padding:0 13px 0 10px;border-radius:999px;background:var(--surface-2);font-weight:600;font-size:13.5px;color:var(--ink)}
+.favb.lab[aria-pressed="true"]{background:color-mix(in srgb, #E5372B 14%, transparent);color:#E5372B}
+.favb.pop .fire{animation:favpop .55s var(--ease)}
+@keyframes favpop{0%{transform:scale(.5)}45%{transform:scale(1.4) rotate(-10deg)}75%{transform:scale(.92)}100%{transform:scale(1)}}
+.favb.lab .fire.on .fl,.fav-big .fire .fl{transform-origin:12px 10px;animation:flick 1.4s ease-in-out infinite alternate}
+@keyframes flick{0%{transform:scaleY(1) skewX(0)}50%{transform:scaleY(1.1) skewX(-3deg)}100%{transform:scaleY(.94) skewX(2deg)}}
+.fav-chip{display:inline-flex;align-items:center;gap:5px}
+.fav-chip .fire{width:17px;height:17px}
+.fav-big{flex:none;width:42px;height:40px;display:grid;place-items:center;border-radius:12px;background:color-mix(in srgb, #E5372B 12%, transparent)}
+.fav-big .fire{width:28px;height:28px}
 .menu{display:flex;flex-direction:column;gap:6px}
 .menu .btn{justify-content:flex-start}
 .prog-ex{display:flex;gap:10px;align-items:center;padding:6px 0}

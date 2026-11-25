@@ -14,7 +14,7 @@ function statsOf(w){
 }
 function exLines(w){
   return (w.exercises || []).map(ex => { const e = exById(ex.exId), b = bestSet(ex), n = workSets(ex).length;
-    let v; if (e.kind === "cardio") { const mn = ex.sets.reduce((a, s) => a + (s.min ?? (s.sec ? s.sec / 60 : 0)), 0), km = ex.sets.reduce((a, s) => a + (s.km || 0), 0); v = `${f1(mn)} min${km ? " · " + f1(km) + " km" : ""}`; }
+    let v; if (e.kind === "cardio") { const mn = ex.sets.reduce((a, s) => a + (s.min ?? (s.sec ? s.sec / 60 : 0)), 0), km = ex.sets.reduce((a, s) => a + (s.km || 0), 0), st = ex.sets.reduce((a, s) => a + (s.steps || 0), 0); v = `${f1(mn)} min${st ? " · " + fInt(st) + " marches" : km ? " · " + f1(km) + " km" : ""}`; }
     else if (e.kind === "kg" && b) v = `${n} × ${f1(b.s.kg || 0)} kg`; else v = `${n} × ${setTxt(ex.sets[0] || {}, e.kind)}`;
     return {name:e.name, v, pr:(w.prs || []).includes(ex.exId)}; });
 }

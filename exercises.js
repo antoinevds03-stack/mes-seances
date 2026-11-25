@@ -136,7 +136,7 @@ window.EXERCISES = [
   ["etirement-psoas","Étirement psoas","Mobilité","Poids du corps","temps"],
   ["squat-profond","Squat profond tenu","Mobilité","Poids du corps","temps"],
   ["cat-cow","Chat-vache","Mobilité","Poids du corps","reps"]
-].map(([id, name, muscle, equip, kind]) => ({id, name, muscle, equip, kind}));
+].map(([id, name, muscle, equip, kind]) => ({id, name, muscle, equip, kind, unit2:id === "stairmaster" ? "steps" : undefined}));
 
 window.MUSCLES = ["Pectoraux","Dos","Épaules","Biceps","Triceps","Avant-bras","Trapèzes","Abdos","Lombaires","Quadriceps","Ischios","Fessiers","Mollets","Corps entier","Cardio","Mobilité"];
 window.EQUIP = ["Barre","Haltères","Machine","Poulie","Poids du corps","Kettlebell","Barre EZ","Smith","Élastique","Autre"];
